@@ -39,13 +39,6 @@ def getSelectedMesh():
     mesh = object.data
     return mesh
 
-def dumpVertices():
-    vertices = getSelectedMesh().vertices.items()
-    for vertex in vertices:
-        vertex_index = vertex[0]
-        vertex_coord = vertex[1].co
-        print("X: %d, Y: %d, Z: %d\n" % (vertex_coord.x, vertex_coord.y, vertex_coord.z))
-
 class ExportOGREMesh(bpy.types.Operator):
     '''Save an OGRE XML Mesh File'''
 
@@ -73,16 +66,26 @@ class ExportOGREMesh(bpy.types.Operator):
         context.manager.add_fileselect(self)
         return running_modal
 
-    def generateGeometryNode(self, mesh_data):
+    def generateGeometryNode(self, mesh_data, vertex_face_index):
         ''' Generate a geometry_node for the provided submesh'''
         vertices = mesh_data.vertices.items()
 
         geometry_node = ogrexml.geometry(vertexcount=len(vertices))
-        vertexbuffer_node = ogrexml.vertexbuffer()
+
+        vertexbuffer_attributes = {
+            "texture_coords" : len(mesh_data.uv_textures),
+            "positions" : "true",
+            "normals" : "true", 
+        }
+        # HACK Shouldn't assume 2 texture coordinates
+        for i, uv_texture in enumerate(mesh_data.uv_textures):
+            vertexbuffer_attributes["texture_coord_dimensions_" + str(i)] = "2"
+
+        vertexbuffer_node = ogrexml.vertexbuffer(**vertexbuffer_attributes)
         geometry_node[2].append(vertexbuffer_node)
 
         # Populate the vertex buffer node with all of the vertices
-        for vdata in vertices:
+        for vertex_number, vdata in enumerate(vertices):
             vindex = vdata[0]
             vcoord = vdata[1].co
             vnormal = vdata[1].normal
@@ -97,22 +100,41 @@ class ExportOGREMesh(bpy.types.Operator):
             vertex_node[2].append(position_node)
             vertex_node[2].append(normal_node)
 
-            # TODO Handle texture coordinate nodes
-
+            # Handle texture coordinate nodes
+            for uv_texture in mesh_data.uv_textures:
+                face_number, vertex_index = vertex_face_index[vertex_number]
+                uv = uv_texture.data[face_number].uv
+                u = uv[vertex_index][0]
+                v = uv[vertex_index][1]
+                texcoord_node = ogrexml.texcoord(u = u, v = v)
+                vertex_node[2].append(texcoord_node)
 
         return geometry_node
 
     def generateFacesNode(self, submesh):
         '''Generate a faces_node for the provided submesh'''
         faces = submesh.faces
-        faces_node = ogrexml.faces(count=len(faces))
+        
+        # Create a list to contain all of the generated face_nodes
+        # We need to do this because we do not know how many faces
+        # there are since we have to tesselate quads into tris
+        faces_list = []
+
+        # Create a dictionary of vertex_number : (face_number, vertex_index)
+        # This dictionary will be used by generateGeometryNode()
+        # so that as it iterates through the vertices, it can get to a
+        # face / vertex for that face in order to get the texture uv
+        vertex_face_index = {}
+
+        # Enumerate through the faces
         for i, face in enumerate(faces):
             if len(face.vertices) == 3: #tri
                 args = {}
                 for n, vertex in enumerate(face.vertices):
                     args["v" + str(n + 1)] = vertex
+                    vertex_face_index[vertex] = (i, n)
                 face_node = ogrexml.face(**args)
-                faces_node[2].append(face_node)
+                faces_list.append(face_node)
             else: # quad
                 # Split into triangles
                 # Handle the first triangle
@@ -120,24 +142,29 @@ class ExportOGREMesh(bpy.types.Operator):
                 vertices = [face.vertices[0], face.vertices[1], face.vertices[2]]
                 for n, vertex in enumerate(vertices):
                     args["v" + str(n + 1)] = vertex
+                    vertex_face_index[vertex] = (i, n)
                 face_node = ogrexml.face(**args)
-                faces_node[2].append(face_node)
-
+                faces_list.append(face_node)
                 # Handle the second triangle
                 args = {}
                 vertices = [face.vertices[0], face.vertices[2], face.vertices[3]]
                 for n, vertex in enumerate(vertices):
                     args["v" + str(n + 1)] = vertex
+                    vertex_face_index[vertex] = (i, n)
                 face_node = ogrexml.face(**args)
-                faces_node[2].append(face_node)
-        return faces_node
+                faces_list.append(face_node)
+
+        faces_node = ogrexml.faces(count=len(faces_list))
+        for face_node in faces_list:
+            faces_node[2].append(face_node)
+        return faces_node, vertex_face_index
 
     def writeMesh(self, filename):
         '''Save the currently selected Blender mesh to a xml file.'''
 
         # Open a log file
         logfilename = filename + ".log"
-        logfile = open(logfilename, "w")
+        self.logfile = open(logfilename, "w")
         
         if filename.lower().endswith('.mesh.mesh.xml'):
             filename = filename[:-14]
@@ -146,7 +173,7 @@ class ExportOGREMesh(bpy.types.Operator):
         if not filename.lower().endswith('.mesh.xml'):
             filename += '.mesh.xml'
 
-        logfile.write("Exporting to %s\n" % (filename))
+        self.logfile.write("Exporting to %s\n" % (filename))
 
         # A shortcut might be:
         # scene = bpy.context.scene
@@ -161,7 +188,7 @@ class ExportOGREMesh(bpy.types.Operator):
         # For now, one and only one objects can be selected
         if len(selectedObjects) != 1:
             print("Error, only one object can be selected.")
-            logfile.close()
+            self.logfile.close()
             return
 
         # Open the file for writing:
@@ -197,11 +224,11 @@ class ExportOGREMesh(bpy.types.Operator):
         submeshes_node[2].append(submesh_node)
 
         # Generate the faces
-        faces_node = self.generateFacesNode(submesh)
+        faces_node, vertex_face_index = self.generateFacesNode(submesh)
         submesh_node[2].append(faces_node)
 
         # Generate the geometry
-        geometry_node = self.generateGeometryNode(submesh)
+        geometry_node = self.generateGeometryNode(submesh, vertex_face_index)
         submesh_node[2].append(geometry_node)
 
         # todo loop through the submeshes again, but for now
@@ -213,14 +240,13 @@ class ExportOGREMesh(bpy.types.Operator):
         submeshnames_node[2].append(submeshname_node)
         
         # Write the XML file
-        logfile.write(bpyml.toxml([mesh_node]))
         writer.write(bpyml.toxml([mesh_node]))
 
         # Close the file:
         writer.close()
         
         # Close the log
-        logfile.close()
+        self.logfile.close()
 
 def menu_func(self, context):
     self.layout.operator(ExportOGREMesh.bl_idname, text="OGRE XML Mesh (.mesh.xml)")
