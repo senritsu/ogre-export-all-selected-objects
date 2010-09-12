@@ -252,9 +252,11 @@ def menu_func(self, context):
     self.layout.operator(ExportOGREMesh.bl_idname, text="OGRE XML Mesh (.mesh.xml)")
 
 def register():
+    bpy.types.register(ExportOGREMesh)
     bpy.types.INFO_MT_file_export.append(menu_func)
 
 def unregister():
+    bpy.types.unregister(ExportOGREMesh)
     bpy.types.INFO_MT_file_export.remove(menu_func)
 
 if __name__ == "__main__":
