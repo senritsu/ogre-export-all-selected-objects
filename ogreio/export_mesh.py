@@ -11,6 +11,7 @@ This script Exports an OGRE XML Mesh file.
 import struct
 import os
 import time
+import traceback
 
 import bpy
 import bpyml
@@ -55,7 +56,20 @@ class ExportOGREMesh(bpy.types.Operator):
 
     def execute(self, context):
         filepath = self.properties.filepath
-        self.writeMesh(filepath)
+
+        # Open a log file
+        logfilename = filepath + ".log"
+        self.logfile = open(logfilename, "w")
+
+        try:
+            self.writeMesh(filepath)
+        except:
+            traceback.print_exc(file=self.logfile)
+            raise
+
+        # Close the log
+        self.logfile.close()
+
         return finished
 
     def invoke(self, context, event):
@@ -162,10 +176,6 @@ class ExportOGREMesh(bpy.types.Operator):
     def writeMesh(self, filename):
         '''Save the currently selected Blender mesh to a xml file.'''
 
-        # Open a log file
-        logfilename = filename + ".log"
-        self.logfile = open(logfilename, "w")
-        
         if filename.lower().endswith('.mesh.mesh.xml'):
             filename = filename[:-14]
             filename += ".mesh.xml"
@@ -216,10 +226,15 @@ class ExportOGREMesh(bpy.types.Operator):
         # for now, lets assume not
         submesh = mesh
 
-        submesh_node = ogrexml.submesh(material=submesh.materials[0].name, 
-            usesharedvertices="false", 
-            use32bitindexes="false", 
-            operationtype="triangle_list")
+        # Create the submesh node
+        submesh_attributes = {
+            "usesharedvertices" : "false", 
+            "use32bitindexes" : "false", 
+            "operationtype" : "triangle_list"
+        }
+        if (len(submesh.materials) > 0):
+            submesh_attributes["material"] = submesh.materials[0].name
+        submesh_node = ogrexml.submesh(**submesh_attributes)
 
         submeshes_node[2].append(submesh_node)
 
@@ -244,19 +259,34 @@ class ExportOGREMesh(bpy.types.Operator):
 
         # Close the file:
         writer.close()
-        
-        # Close the log
-        self.logfile.close()
 
 def menu_func(self, context):
     self.layout.operator(ExportOGREMesh.bl_idname, text="OGRE XML Mesh (.mesh.xml)")
 
+def needsToRegister():
+    maj, min, build = bpy.app.version
+    if (maj > 2):
+        return False
+    if (maj == 2):
+        if (min > 53):
+            return False
+        if (min < 53):
+            return True
+        if (build == 0):
+            return True
+        return False
+    return True
+        
+        
+
 def register():
-    bpy.types.register(ExportOGREMesh)
+    if needsToRegister():
+        bpy.types.register(ExportOGREMesh)
     bpy.types.INFO_MT_file_export.append(menu_func)
 
 def unregister():
-    bpy.types.unregister(ExportOGREMesh)
+    if needsToRegister():
+        bpy.types.unregister(ExportOGREMesh)
     bpy.types.INFO_MT_file_export.remove(menu_func)
 
 if __name__ == "__main__":
