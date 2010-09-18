@@ -46,10 +46,13 @@ class ExportOGREMesh(bpy.types.Operator):
     bl_idname = "export.ogre_xml"
     bl_label = 'Export OGRE XML'
 
-    # testing
-    defaultFileName = "/home/sgtflame/dev/koz/resources/test.mesh.xml"
+    #  Testing - These are only used when invoked without specifying a filepath (not via the GUI)
+    if bpy.app.build_platform.split(':')[0] == 'Windows':
+        defaultFileName = "C:/dev/KnightsOfZen/resources/test.mesh.xml"
+    else:
+        defaultFileName = "/home/sgtflame/dev/koz/resources/test.mesh.xml"
     #defaultFileName = "test.mesh.xml"
-    
+
     filepath = StringProperty(name="File Path", description="Filepath used for exporting the X3D file", maxlen= 1024, default= defaultFileName)
     #check_existing = BoolProperty(name="Check Existing", description="Check and warn on overwriting existing files", default=True, options={'HIDDEN'})
     xml_to_mesh = StringProperty(name="OgreXMLConverter", description="Path to OgreXMLConverter", maxlen=1024, default="/usr/local/bin/OgreXMLConverter")
@@ -76,8 +79,8 @@ class ExportOGREMesh(bpy.types.Operator):
         import os
         if not self.properties.is_property_set("filepath"):
             self.properties.filepath = os.path.splitext(bpy.data.filepath)[0] + ".mesh.xml"
-
-        context.manager.add_fileselect(self)
+        wm = context.window_manager
+        wm.add_fileselect(self)
         return running_modal
 
     def generateGeometryNode(self, mesh_data, vertex_face_index):
@@ -263,30 +266,10 @@ class ExportOGREMesh(bpy.types.Operator):
 def menu_func(self, context):
     self.layout.operator(ExportOGREMesh.bl_idname, text="OGRE XML Mesh (.mesh.xml)")
 
-def needsToRegister():
-    maj, min, build = bpy.app.version
-    if (maj > 2):
-        return False
-    if (maj == 2):
-        if (min > 53):
-            return False
-        if (min < 53):
-            return True
-        if (build == 0):
-            return True
-        return False
-    return True
-        
-        
-
 def register():
-    if needsToRegister():
-        bpy.types.register(ExportOGREMesh)
     bpy.types.INFO_MT_file_export.append(menu_func)
 
 def unregister():
-    if needsToRegister():
-        bpy.types.unregister(ExportOGREMesh)
     bpy.types.INFO_MT_file_export.remove(menu_func)
 
 if __name__ == "__main__":
