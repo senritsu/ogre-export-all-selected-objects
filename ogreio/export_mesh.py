@@ -16,13 +16,11 @@ import traceback
 import bpy
 import bpyml
 
-bpyml.tag_module("ogrexml", ("mesh", "submeshes", "submesh", "submeshnames", 
-    "submeshname", "faces", "face", "geometry", "vertexbuffer", "vertex",
-    "position", "normal", "texcoord"))
+
 import ogrexml
 
 from bpy.props import *
-from ogre_mesh import *
+from ogreio.ogre_mesh import *
 
 class ExportOGREMesh(bpy.types.Operator):
     '''Save an OGRE XML Mesh File'''

@@ -60,7 +60,7 @@ class OgreSubMesh():
         vertexbuffer_attributes = {
             "texture_coords" : len(self.mesh.uv_textures),
             "positions" : "true",
-            #"normals" : "true", 
+            "normals" : "true", 
         }
         # HACK Shouldn't assume 2 texture coordinates
         for i, uv_texture in enumerate(self.mesh.uv_textures):
@@ -78,12 +78,12 @@ class OgreSubMesh():
                 'z' : vertex.blender_vertex.co.z
             }
             vertex_node[2].append(ogrexml.position(**position))
-            #normal = {
-            #    'x' : vertex.blender_vertex.normal.x,
-            #    'y' : vertex.blender_vertex.normal.y,
-            #    'z' : vertex.blender_vertex.normal.z
-            #}
-            #vertex_node[2].append(ogrexml.normal(**normal))
+            normal = {
+                'x' : vertex.blender_vertex.normal.x,
+                'y' : vertex.blender_vertex.normal.y,
+                'z' : vertex.blender_vertex.normal.z
+            }
+            vertex_node[2].append(ogrexml.normal(**normal))
             
             for uv_coord in vertex.uv_coords:
                 texcoord = {
