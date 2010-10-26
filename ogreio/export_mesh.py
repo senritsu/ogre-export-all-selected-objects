@@ -117,18 +117,8 @@ class ExportOGREMesh(bpy.types.Operator):
             if obj.select:
                 selectedObjects.append(obj)
 
-        # For now, one and only one objects can be selected
-        if len(selectedObjects) != 1:
-            print("Error, only one object can be selected.")
-            self.logfile.close()
-            return
-
         # Open the file for writing:
         writer = open(filename, "w")
-
-        # HACK only export the first selected object
-        object = selectedObjects[0]
-        mesh = object.data
 
         # Create the general layout of the file
         # <mesh>
@@ -144,33 +134,38 @@ class ExportOGREMesh(bpy.types.Operator):
         mesh_node[2].append(submeshes_node)
         mesh_node[2].append(submeshnames_node)
 
-        # Generate the faces and split into submeshes based on material
-        submeshes = self.getSubMeshes(mesh).values()
 
-        for subMeshIndex, submesh in enumerate(submeshes):
+        subMeshIndex = 0
+        for obj in selectedObjects:
+            # Generate the faces and split into submeshes based on material
+            mesh = obj.data
+            submeshes = self.getSubMeshes(mesh).values()
 
-            # Create the submesh node
-            submesh_attributes = {
-                "usesharedvertices" : "false", 
-                "use32bitindexes" : "false", 
-                "operationtype" : "triangle_list"
-            }
+            for materialIndex,submesh in enumerate(submeshes):
 
-            if (len(mesh.materials) > 0):
-                submesh_attributes["material"] = mesh.materials[subMeshIndex].name
+                # Create the submesh node
+                submesh_attributes = {
+                    "usesharedvertices" : "false",
+                    "use32bitindexes" : "false",
+                    "operationtype" : "triangle_list"
+                }
 
-            submesh_node = ogrexml.submesh(**submesh_attributes)
+                if (len(mesh.materials) > 0):
+                    submesh_attributes["material"] = mesh.materials[materialIndex].name
 
-            submeshes_node[2].append(submesh_node)
+                submesh_node = ogrexml.submesh(**submesh_attributes)
 
-            submesh_node[2].append(submesh.getFacesXML())
-            submesh_node[2].append(submesh.getGeometryXML())
+                submeshes_node[2].append(submesh_node)
 
-            subMeshIndex = 0
-            submeshname_node = ogrexml.submeshname(name=mesh.materials[subMeshIndex].name,
-                index = str(subMeshIndex))
+                submesh_node[2].append(submesh.getFacesXML())
+                submesh_node[2].append(submesh.getGeometryXML())
 
-            submeshnames_node[2].append(submeshname_node)
+
+                submeshname_node = ogrexml.submeshname(name="{0}.{1}".format(obj.name,mesh.materials[materialIndex].name),
+                    index = str(subMeshIndex))
+                subMeshIndex += 1
+
+                submeshnames_node[2].append(submeshname_node)
 
         # Write the XML file
         #self.logfile.write(str(mesh_node))
